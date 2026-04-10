@@ -8,8 +8,8 @@ const COLORS = ['#1D9E75', '#378ADD', '#D85A30', '#7F77DD', '#BA7517', '#D4537E'
 
 let state = {
 	members: [
-		{ id: '1', name: 'Ana', color: '#1D9E75' },
-		{ id: '2', name: 'Bruno', color: '#378ADD' }
+		{ id: '1', name: 'Cat', color: '#1D9E75' },
+		{ id: '2', name: 'Dog', color: '#378ADD' }
 	],
 	expenses: [],
 	currentMonth: new Date().toISOString().slice(0, 7)
