@@ -8,10 +8,11 @@ const COLORS = ['#1D9E75', '#378ADD', '#D85A30', '#7F77DD', '#BA7517', '#D4537E'
 
 let state = {
 	members: [
-		{ id: '1', name: 'Cat', color: '#1D9E75' },
-		{ id: '2', name: 'Dog', color: '#378ADD' }
+		{ id: '1', name: 'Cat', color: '#1D9E75', isDependent: false },
+		{ id: '2', name: 'Dog', color: '#378ADD', isDependent: false }
 	],
 	expenses: [],
+	salaries: {},
 	currentMonth: new Date().toISOString().slice(0, 7)
 };
 
@@ -24,6 +25,25 @@ function load() {
 	if (d) try { state = JSON.parse(d) } catch (e) { }
 }
 load();
+if (!state.salaries) state.salaries = {};
+state.members.forEach(m => {
+	if (m.isDependent === undefined) m.isDependent = false;
+	if (m.salary !== undefined) {
+		if (m.salary > 0 && !(state.salaries[state.currentMonth] && state.salaries[state.currentMonth][m.id])) {
+			if (!state.salaries[state.currentMonth]) state.salaries[state.currentMonth] = {};
+			state.salaries[state.currentMonth][m.id] = m.salary;
+		}
+		delete m.salary;
+	}
+});
+
+function getSalary(memberId, ym) {
+	return (state.salaries[ym] && state.salaries[ym][memberId]) || 0;
+}
+
+function getTotalIncome(ym) {
+	return state.members.reduce((a, m) => a + (m.isDependent ? 0 : getSalary(m.id, ym)), 0);
+}
 
 const MONTHS_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 function fmtMonth(ym) { const [y, m] = ym.split('-'); return MONTHS_PT[+m - 1] + ' ' + y }
@@ -79,10 +99,15 @@ function renderDashboard() {
 	const totalInd = individual.reduce((a, e) => a + e.amount, 0);
 	const total = totalShared + totalInd;
 
+	const totalIncome = getTotalIncome(ym);
+	const pctUsed = totalIncome > 0 ? (total / totalIncome * 100).toFixed(0) : '—';
+
 	document.getElementById('summary-metrics').innerHTML = `
-    <div class="metric"><div class="metric-label">Total do mês</div><div class="metric-value">${fmtMoney(total)}</div></div>
-    <div class="metric"><div class="metric-label">Despesas compartilhadas</div><div class="metric-value">${fmtMoney(totalShared)}</div></div>
-    <div class="metric"><div class="metric-label">Despesas individuais</div><div class="metric-value">${fmtMoney(totalInd)}</div></div>
+    <div class="metric"><div class="metric-label">Renda do Grupo</div><div class="metric-value">${fmtMoney(totalIncome)}</div></div>
+    <div class="metric"><div class="metric-label">Total de despesas</div><div class="metric-value">${fmtMoney(total)}</div></div>
+    <div class="metric"><div class="metric-label">Comprometimento</div><div class="metric-value">${pctUsed}${pctUsed !== '—' ? '%' : ''}</div></div>
+    <div class="metric"><div class="metric-label">Compartilhadas</div><div class="metric-value">${fmtMoney(totalShared)}</div></div>
+    <div class="metric"><div class="metric-label">Individuais</div><div class="metric-value">${fmtMoney(totalInd)}</div></div>
     <div class="metric"><div class="metric-label">Nº de lançamentos</div><div class="metric-value">${exps.length}</div></div>
   `;
 
@@ -94,12 +119,18 @@ function renderDashboard() {
 		const pct = Math.min(100, Math.abs(b.net) / maxAbs * 100);
 		const cls = b.net >= 0 ? 'positive' : 'negative';
 		const tag = b.net > 0.01 ? `<span class="tag tag-credit">crédito ${fmtMoney(b.net)}</span>` : b.net < -0.01 ? `<span class="tag tag-debit">débito ${fmtMoney(Math.abs(b.net))}</span>` : `<span class="tag tag-neutral">quits</span>`;
+		const mSal = getSalary(m.id, ym);
+		const salaryLine = m.isDependent
+			? ' · <span style="color:#d97706">Dependente</span>'
+			: mSal > 0
+				? ` · Salário: ${fmtMoney(mSal)}`
+				: ' · <span style="color:#d97706">Sem salário no mês</span>';
 		html += `<div class="member-balance">
       <div class="member-header">
         <div class="avatar" style="background:${m.color}22;color:${m.color}">${m.name.slice(0, 2).toUpperCase()}</div>
         <div style="flex:1">
           <div style="font-weight:500;font-size:13px">${m.name}</div>
-          <div style="font-size:11px;color:var(--color-text-secondary)">Pagou: ${fmtMoney(b.paid)} · Deve: ${fmtMoney(b.owed)}</div>
+          <div style="font-size:11px;color:var(--color-text-secondary)">Pagou: ${fmtMoney(b.paid)} · Deve: ${fmtMoney(b.owed)}${salaryLine}</div>
         </div>
         ${tag}
       </div>
@@ -162,17 +193,24 @@ function renderExpenses() {
 }
 
 function renderMembers() {
-	let html = state.members.map(m => `
+	let html = state.members.map(m => {
+		const typeInfo = m.isDependent
+			? '<span class="tag tag-dependent">Dependente</span>'
+			: '<span style="font-size:12px;color:var(--color-text-secondary)">Membro com renda</span>';
+		return `
     <div class="member-row">
       <div class="avatar" style="background:${m.color}22;color:${m.color}">${m.name.slice(0, 2).toUpperCase()}</div>
-      <div style="flex:1;font-weight:500">${m.name}</div>
+      <div style="flex:1">
+        <div style="font-weight:500">${m.name}</div>
+        <div style="margin-top:2px">${typeInfo}</div>
+      </div>
       <div class="color-swatch" style="background:${m.color}"></div>
       <div style="display:flex;gap:4px">
         <button class="btn btn-sm" onclick="editMember('${m.id}')">✏️</button>
         ${state.members.length > 1 ? `<button class="btn btn-sm btn-danger" onclick="deleteMember('${m.id}')">🗑</button>` : ''}
       </div>
-    </div>
-  `).join('');
+    </div>`;
+	}).join('');
 	document.getElementById('members-list').innerHTML = html || '<div class="empty">Nenhum membro</div>';
 }
 
@@ -222,9 +260,9 @@ function openExpenseModal(id) {
 	const modal = document.getElementById('expense-modal');
 	document.getElementById('expense-modal-title').textContent = id ? 'Editar despesa' : 'Nova despesa';
 	const paidSel = document.getElementById('e-paidby');
-	paidSel.innerHTML = state.members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+	paidSel.innerHTML = state.members.map(m => `<option value="${m.id}">${m.name}${m.isDependent ? ' (dep.)' : ''}</option>`).join('');
 	const splitDiv = document.getElementById('split-checks');
-	splitDiv.innerHTML = state.members.map(m => `<label><input type="checkbox" value="${m.id}" checked> ${m.name}</label>`).join('');
+	splitDiv.innerHTML = state.members.map(m => `<label><input type="checkbox" value="${m.id}" checked> ${m.name}${m.isDependent ? ' (dep.)' : ''}</label>`).join('');
 	if (id) {
 		const e = state.expenses.find(x => x.id === id);
 		document.getElementById('e-desc').value = e.desc;
@@ -256,6 +294,58 @@ function closeExpenseModal() {
 function toggleSplit() {
 	const t = document.getElementById('e-type').value;
 	document.getElementById('split-section').style.display = t === 'individual' ? 'none' : 'block';
+}
+
+function openSalaryModal() {
+	const ym = state.currentMonth;
+	document.getElementById('salary-modal-title').textContent = `Salários · ${fmtMonth(ym)}`;
+	const nonDeps = state.members.filter(m => !m.isDependent);
+	const body = document.getElementById('salary-modal-body');
+	if (!nonDeps.length) {
+		body.innerHTML = '<div class="empty">Nenhum membro com renda cadastrado. Desmarque "Dependente" em algum membro para registrar salário.</div>';
+	} else {
+		body.innerHTML = nonDeps.map(m => `
+			<div class="form-row cols-2" style="align-items:center">
+				<div style="display:flex;align-items:center;gap:8px">
+					<div class="avatar" style="background:${m.color}22;color:${m.color}">${m.name.slice(0, 2).toUpperCase()}</div>
+					<div style="font-weight:500">${m.name}</div>
+				</div>
+				<div>
+					<input type="number" step="0.01" min="0" class="salary-input" data-mid="${m.id}" value="${getSalary(m.id, ym) || ''}" placeholder="0,00">
+				</div>
+			</div>
+		`).join('');
+	}
+	document.getElementById('salary-modal').classList.add('open');
+}
+
+function closeSalaryModal() {
+	document.getElementById('salary-modal').classList.remove('open');
+}
+
+function saveSalaries() {
+	const ym = state.currentMonth;
+	const inputs = document.querySelectorAll('#salary-modal-body .salary-input');
+	if (!state.salaries[ym]) state.salaries[ym] = {};
+	inputs.forEach(inp => {
+		const mid = inp.dataset.mid;
+		const val = parseFloat(inp.value) || 0;
+		if (val > 0) state.salaries[ym][mid] = val;
+		else delete state.salaries[ym][mid];
+	});
+	if (Object.keys(state.salaries[ym]).length === 0) delete state.salaries[ym];
+	save(); renderAll(); closeSalaryModal();
+}
+
+function copyPreviousSalaries() {
+	const ym = state.currentMonth;
+	const [y, m] = ym.split('-').map(Number);
+	const prev = new Date(y, m - 2, 1).toISOString().slice(0, 7);
+	const prevSal = state.salaries[prev];
+	if (!prevSal) { alert('Sem salários registrados no mês anterior.'); return }
+	document.querySelectorAll('#salary-modal-body .salary-input').forEach(inp => {
+		if (prevSal[inp.dataset.mid]) inp.value = prevSal[inp.dataset.mid];
+	});
 }
 
 function saveExpense() {
@@ -291,9 +381,11 @@ function openMemberModal(id) {
 		const m = state.members.find(x => x.id === id);
 		document.getElementById('m-name').value = m.name;
 		document.getElementById('m-color').value = m.color;
+		document.getElementById('m-dependent').checked = m.isDependent || false;
 	} else {
 		document.getElementById('m-name').value = '';
 		document.getElementById('m-color').value = COLORS[state.members.length % COLORS.length];
+		document.getElementById('m-dependent').checked = false;
 	}
 	document.getElementById('member-modal').classList.add('open');
 }
@@ -306,12 +398,13 @@ function closeMemberModal() {
 function saveMember() {
 	const name = document.getElementById('m-name').value.trim();
 	const color = document.getElementById('m-color').value;
+	const isDependent = document.getElementById('m-dependent').checked;
 	if (!name) { alert('Informe um nome.'); return }
 	if (editingMemberId) {
 		const idx = state.members.findIndex(m => m.id === editingMemberId);
-		state.members[idx] = { ...state.members[idx], name, color };
+		state.members[idx] = { ...state.members[idx], name, color, isDependent };
 	} else {
-		state.members.push({ id: Date.now() + '', name, color });
+		state.members.push({ id: Date.now() + '', name, color, isDependent });
 	}
 	save(); renderAll(); closeMemberModal();
 }
@@ -339,11 +432,11 @@ function buildXLSXMonth(ym) {
 	const wsExp = XLSX.utils.aoa_to_sheet(expRows);
 	XLSX.utils.book_append_sheet(wb, wsExp, 'Despesas');
 
-	const balRows = [['Membro', 'Pagou (R$)', 'Deve (R$)', 'Individual (R$)', 'Saldo (R$)', 'Status']];
+	const balRows = [['Membro', 'Tipo', 'Salário do mês (R$)', 'Pagou (R$)', 'Deve (R$)', 'Individual (R$)', 'Saldo (R$)', 'Status']];
 	state.members.forEach(m => {
 		const b = balances[m.id];
 		const status = b.net > 0.01 ? 'Crédito' : b.net < -0.01 ? 'Débito' : 'Quits';
-		balRows.push([m.name, b.paid, b.owed, b.individual, b.net, status]);
+		balRows.push([m.name, m.isDependent ? 'Dependente' : 'Membro', m.isDependent ? 0 : getSalary(m.id, ym), b.paid, b.owed, b.individual, b.net, status]);
 	});
 	const wsBal = XLSX.utils.aoa_to_sheet(balRows);
 	XLSX.utils.book_append_sheet(wb, wsBal, 'Balanço');
@@ -412,6 +505,17 @@ function importData(input) {
 				if (data.members && data.expenses) {
 					if (confirm('Importar dados? Isso substituirá os dados atuais.')) {
 						state = { ...state, ...data };
+						if (!state.salaries) state.salaries = {};
+						state.members.forEach(m => {
+							if (m.isDependent === undefined) m.isDependent = false;
+							if (m.salary !== undefined) {
+								if (m.salary > 0 && !(state.salaries[state.currentMonth] && state.salaries[state.currentMonth][m.id])) {
+									if (!state.salaries[state.currentMonth]) state.salaries[state.currentMonth] = {};
+									state.salaries[state.currentMonth][m.id] = m.salary;
+								}
+								delete m.salary;
+							}
+						});
 						save(); renderAll(); alert('Dados importados com sucesso!');
 					}
 				} else { alert('Arquivo JSON inválido.') }
@@ -459,5 +563,6 @@ function importData(input) {
 
 document.getElementById('expense-modal').addEventListener('click', function (e) { if (e.target === this) closeExpenseModal() });
 document.getElementById('member-modal').addEventListener('click', function (e) { if (e.target === this) closeMemberModal() });
+document.getElementById('salary-modal').addEventListener('click', function (e) { if (e.target === this) closeSalaryModal() });
 
 renderAll();

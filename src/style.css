@@ -506,3 +506,22 @@ select:focus {
 	height: 100%;
 	border-radius: 3px;
 }
+
+.tag-dependent {
+	background: #fef3c7;
+	color: #92400e;
+}
+
+.check-inline {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	color: var(--color-text-primary);
+	cursor: pointer;
+	margin-bottom: 0;
+}
+
+.check-inline input[type="checkbox"] {
+	width: auto;
+}

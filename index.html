@@ -23,6 +23,7 @@
 				<button class="btn btn-sm" onclick="changeMonth(-1)">&#8592;</button>
 				<span id="month-label"></span>
 				<button class="btn btn-sm" onclick="changeMonth(1)">&#8594;</button>
+				<button class="btn btn-sm" onclick="openSalaryModal()">💰 Salários do mês</button>
 				<button class="btn btn-sm btn-success" onclick="exportMonthXLSX()">Exportar XLSX</button>
 			</div>
 			<div class="section">
@@ -158,9 +159,33 @@
 				<div><label>Nome</label><input id="m-name" placeholder="Nome do membro"></div>
 				<div><label>Cor</label><input id="m-color" type="color" style="height:36px;padding:2px 4px"></div>
 			</div>
+			<div class="form-row">
+				<div>
+					<label class="check-inline"><input type="checkbox" id="m-dependent"> Dependente (sem renda própria)</label>
+				</div>
+			</div>
+			<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px">
+				Os salários são registrados mês a mês no painel, para acomodar variações (horas extras, descontos, etc).
+			</p>
 			<div class="modal-footer">
 				<button class="btn" onclick="closeMemberModal()">Cancelar</button>
 				<button class="btn btn-primary" onclick="saveMember()">Salvar</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- SALARY MODAL -->
+	<div class="modal-bg" id="salary-modal">
+		<div class="modal">
+			<h2 id="salary-modal-title">Salários do mês</h2>
+			<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">
+				Informe o valor líquido recebido por cada membro neste mês. Deixe em branco ou 0 se não houve recebimento.
+			</p>
+			<div id="salary-modal-body"></div>
+			<div class="modal-footer">
+				<button class="btn" onclick="copyPreviousSalaries()">Copiar mês anterior</button>
+				<button class="btn" onclick="closeSalaryModal()">Cancelar</button>
+				<button class="btn btn-primary" onclick="saveSalaries()">Salvar</button>
 			</div>
 		</div>
 	</div>
