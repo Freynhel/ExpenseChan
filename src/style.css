@@ -525,3 +525,54 @@ select:focus {
 .check-inline input[type="checkbox"] {
 	width: auto;
 }
+
+.expense-item {
+	border-radius: var(--border-radius-md);
+}
+
+.expense-settlements {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 2px 10px 10px 46px;
+	margin-top: -2px;
+}
+
+.settle-label {
+	color: var(--color-text-secondary);
+	font-size: 11px;
+}
+
+.settle-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 3px 8px;
+	background: var(--color-background-secondary);
+	border: 0.5px solid var(--color-border-secondary);
+	border-radius: 10px;
+	cursor: pointer;
+	font-size: 11px;
+	color: var(--color-text-primary);
+	transition: all 0.15s;
+	margin: 0;
+}
+
+.settle-chip:hover {
+	border-color: var(--color-border-tertiary);
+}
+
+.settle-chip input[type="checkbox"] {
+	width: 12px;
+	height: 12px;
+	margin: 0;
+	cursor: pointer;
+	accent-color: #1d9e75;
+}
+
+.settle-chip.settled {
+	background: rgba(29, 158, 117, 0.15);
+	border-color: rgba(29, 158, 117, 0.4);
+	color: #1d9e75;
+}

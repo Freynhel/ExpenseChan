@@ -36,6 +36,7 @@ state.members.forEach(m => {
 		delete m.salary;
 	}
 });
+state.expenses.forEach(e => { if (!Array.isArray(e.settledBy)) e.settledBy = []; });
 
 function getSalary(memberId, ym) {
 	return (state.salaries[ym] && state.salaries[ym][memberId]) || 0;
@@ -70,21 +71,29 @@ function getMonthExpenses(ym) { return state.expenses.filter(e => e.month === ym
 function calcBalances(ym) {
 	const exps = getMonthExpenses(ym);
 	const bal = {};
-	state.members.forEach(m => { bal[m.id] = { paid: 0, owed: 0, individual: 0 } });
+	state.members.forEach(m => { bal[m.id] = { paid: 0, owed: 0, individual: 0, settledReceived: 0, settledOwed: 0 } });
 	exps.forEach(e => {
 		if (e.isIndividual) {
 			if (bal[e.paidBy]) bal[e.paidBy].individual += e.amount;
 		} else {
 			const split = e.splitAmong && e.splitAmong.length > 0 ? e.splitAmong : state.members.map(m => m.id);
 			const share = e.amount / split.length;
+			const settled = e.settledBy || [];
 			if (bal[e.paidBy]) bal[e.paidBy].paid += e.amount;
-			split.forEach(mid => { if (bal[mid]) bal[mid].owed += share });
+			split.forEach(mid => {
+				if (bal[mid]) bal[mid].owed += share;
+				if (mid !== e.paidBy && settled.includes(mid)) {
+					if (bal[e.paidBy]) bal[e.paidBy].settledReceived += share;
+					if (bal[mid]) bal[mid].settledOwed += share;
+				}
+			});
 		}
 	});
 	const result = {};
 	state.members.forEach(m => {
-		const net = bal[m.id].paid - bal[m.id].owed;
-		result[m.id] = { paid: bal[m.id].paid, owed: bal[m.id].owed, individual: bal[m.id].individual, net };
+		const b = bal[m.id];
+		const net = b.paid - b.owed - b.settledReceived + b.settledOwed;
+		result[m.id] = { paid: b.paid, owed: b.owed, individual: b.individual, settledReceived: b.settledReceived, settledOwed: b.settledOwed, net };
 	});
 	return result;
 }
@@ -124,13 +133,13 @@ function renderDashboard() {
 			? ' · <span style="color:#d97706">Dependente</span>'
 			: mSal > 0
 				? ` · Salário: ${fmtMoney(mSal)}`
-				: ' · <span style="color:#d97706">Sem salário no mês</span>';
+				: ' · <span style="color:#d97706">Salário não informado</span>';
 		html += `<div class="member-balance">
       <div class="member-header">
         <div class="avatar" style="background:${m.color}22;color:${m.color}">${m.name.slice(0, 2).toUpperCase()}</div>
         <div style="flex:1">
           <div style="font-weight:500;font-size:13px">${m.name}</div>
-          <div style="font-size:11px;color:var(--color-text-secondary)">Pagou: ${fmtMoney(b.paid)} · Deve: ${fmtMoney(b.owed)}${salaryLine}</div>
+          <div style="font-size:11px;color:var(--color-text-secondary)">Pagou: ${fmtMoney(b.paid)}${salaryLine}</div>
         </div>
         ${tag}
       </div>
@@ -173,20 +182,48 @@ function renderExpenses() {
 		const payer = state.members.find(m => m.id === e.paidBy);
 		const splitNames = e.isIndividual ? 'Individual' :
 			(e.splitAmong && e.splitAmong.length) ? e.splitAmong.map(id => state.members.find(m => m.id === id)?.name || '?').join(', ') : 'Todos';
-		return `<div class="expense-row ${e.isIndividual ? 'individual' : ''}">
-      <div class="cat-icon">${CATS[e.category] || '📦'}</div>
-      <div>
-        <div style="font-weight:500">${e.desc}</div>
-        <div style="font-size:11px;color:var(--color-text-secondary)">
-          ${payer ? `<span style="color:${payer.color};font-weight:500">${payer.name}</span>` : ''} · ${splitNames}
+
+		let settlementHtml = '';
+		if (!e.isIndividual) {
+			const splitFinal = e.splitAmong && e.splitAmong.length > 0 ? e.splitAmong : state.members.map(m => m.id);
+			const debtors = splitFinal.filter(id => id !== e.paidBy);
+			if (debtors.length) {
+				const share = e.amount / splitFinal.length;
+				const settled = e.settledBy || [];
+				const allSettled = debtors.every(id => settled.includes(id));
+				const chips = debtors.map(id => {
+					const m = state.members.find(x => x.id === id);
+					if (!m) return '';
+					const isSettled = settled.includes(id);
+					return `<label class="settle-chip ${isSettled ? 'settled' : ''}" title="${isSettled ? 'Marcar como pendente' : 'Marcar como pago'}">
+            <input type="checkbox" ${isSettled ? 'checked' : ''} onchange="toggleSettlement('${e.id}','${id}')">
+            <span>${m.name} · ${fmtMoney(share)}</span>
+          </label>`;
+				}).join('');
+				settlementHtml = `<div class="expense-settlements">
+          <span class="settle-label">${allSettled ? '✓ Quitada' : 'Quitações:'}</span>
+          ${chips}
+        </div>`;
+			}
+		}
+
+		return `<div class="expense-item">
+      <div class="expense-row ${e.isIndividual ? 'individual' : ''}">
+        <div class="cat-icon">${CATS[e.category] || '📦'}</div>
+        <div>
+          <div style="font-weight:500">${e.desc}</div>
+          <div style="font-size:11px;color:var(--color-text-secondary)">
+            ${payer ? `<span style="color:${payer.color};font-weight:500">${payer.name}</span>` : ''} · ${splitNames}
+          </div>
+        </div>
+        <span class="cat-badge">${e.category}</span>
+        <span style="font-weight:500;white-space:nowrap;min-width:80px;text-align:right">${fmtMoney(e.amount)}</span>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm" onclick="editExpense('${e.id}')">✏️</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteExpense('${e.id}')">🗑</button>
         </div>
       </div>
-      <span class="cat-badge">${e.category}</span>
-      <span style="font-weight:500;white-space:nowrap;min-width:80px;text-align:right">${fmtMoney(e.amount)}</span>
-      <div style="display:flex;gap:4px">
-        <button class="btn btn-sm" onclick="editExpense('${e.id}')">✏️</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteExpense('${e.id}')">🗑</button>
-      </div>
+      ${settlementHtml}
     </div>`;
 	}).join('') : '<div class="empty">Sem despesas neste mês. Clique em "+ Nova despesa" para adicionar.</div>';
 	document.getElementById('expenses-list').innerHTML = html;
@@ -359,9 +396,12 @@ function saveExpense() {
 	if (!isIndividual && splitAmong.length === 0) { alert('Selecione ao menos um membro para dividir.'); return }
 	if (editingExpenseId) {
 		const idx = state.expenses.findIndex(e => e.id === editingExpenseId);
-		state.expenses[idx] = { ...state.expenses[idx], desc, amount, category, paidBy, isIndividual, splitAmong };
+		const existing = state.expenses[idx];
+		const newSettledBy = isIndividual ? [] :
+			(existing.settledBy || []).filter(id => splitAmong.includes(id) && id !== paidBy);
+		state.expenses[idx] = { ...existing, desc, amount, category, paidBy, isIndividual, splitAmong, settledBy: newSettledBy };
 	} else {
-		state.expenses.push({ id: Date.now() + '', month: state.currentMonth, desc, amount, category, paidBy, isIndividual, splitAmong });
+		state.expenses.push({ id: Date.now() + '', month: state.currentMonth, desc, amount, category, paidBy, isIndividual, splitAmong, settledBy: [] });
 	}
 	save(); renderAll(); closeExpenseModal();
 }
@@ -373,6 +413,16 @@ function deleteExpense(id) {
 }
 
 function editExpense(id) { openExpenseModal(id) }
+
+function toggleSettlement(expenseId, memberId) {
+	const exp = state.expenses.find(e => e.id === expenseId);
+	if (!exp) return;
+	if (!Array.isArray(exp.settledBy)) exp.settledBy = [];
+	const idx = exp.settledBy.indexOf(memberId);
+	if (idx >= 0) exp.settledBy.splice(idx, 1);
+	else exp.settledBy.push(memberId);
+	save(); renderAll();
+}
 
 function openMemberModal(id) {
 	editingMemberId = id || null;
